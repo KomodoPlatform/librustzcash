@@ -237,6 +237,7 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(not(feature = "wasm-extra"))]
 pub fn scan_cached_blocks<E, N, P, C, D>(
     params: &P,
     cache: &C,

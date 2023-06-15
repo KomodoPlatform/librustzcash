@@ -252,12 +252,11 @@ pub trait WalletWrite: WalletRead {
 
 /// This trait provides sequential access to raw blockchain data via a callback-oriented
 /// API.
-#[cfg(feature = "wasm-extra")]
-#[async_trait::async_trait]
+#[cfg(not(feature = "wasm-extra"))]
 pub trait BlockSource {
     type Error;
 
-    async fn with_blocks<F>(
+    fn with_blocks<F>(
         &self,
         from_height: BlockHeight,
         limit: Option<u32>,
@@ -267,10 +266,22 @@ pub trait BlockSource {
         F: FnMut(CompactBlock) -> Result<(), Self::Error>;
 }
 
-#[cfg(not(feature = "wasm-extra"))]
+#[cfg(feature = "wasm-extra")]
+#[async_trait::async_trait]
 pub trait BlockSource {
     type Error;
 
+    #[cfg(feature = "wasm-extra")]
+    async fn with_blocks<F>(
+        &self,
+        from_height: BlockHeight,
+        limit: Option<u32>,
+        with_row: F,
+    ) -> Result<(), Self::Error>
+    where
+        F: FnMut(CompactBlock) -> Result<(), Self::Error>;
+
+    #[cfg(not(feature = "wasm-extra"))]
     fn with_blocks<F>(
         &self,
         from_height: BlockHeight,
