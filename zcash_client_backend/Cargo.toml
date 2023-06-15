@@ -30,6 +30,7 @@ subtle = "2.2.3"
 time = "0.3"
 zcash_note_encryption = { version = "0.0", path = "../components/zcash_note_encryption" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
+futures = "0.3.28"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.20"
@@ -44,6 +45,7 @@ zcash_proofs = { version = "0.5", path = "../zcash_proofs" }
 
 [features]
 test-dependencies = ["proptest", "zcash_primitives/test-dependencies"]
+wasm-extra = []
 
 [badges]
 maintenance = { status = "actively-developed" }
