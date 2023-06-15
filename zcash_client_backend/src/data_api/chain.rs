@@ -131,7 +131,6 @@ use crate::{
 /// - `Err(e)` if there was an error during validation unrelated to chain validity.
 ///
 /// This function does not mutate either of the databases.
-#[cfg(not(feature = "wasm-extra"))]
 pub fn validate_chain<N, E, P, C>(
     parameters: &P,
     cache: &C,
@@ -237,7 +236,6 @@ where
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(not(feature = "wasm-extra"))]
 pub fn scan_cached_blocks<E, N, P, C, D>(
     params: &P,
     cache: &C,
