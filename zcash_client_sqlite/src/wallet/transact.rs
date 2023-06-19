@@ -149,6 +149,7 @@ pub fn select_spendable_notes<P>(
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
     use tempfile::NamedTempFile;
 
     use zcash_primitives::{
@@ -203,9 +204,9 @@ mod tests {
         let to = extsk0.default_address().unwrap().1.into();
 
         // Invalid extsk for the given account should cause an error
-        let mut db_write = db_data.get_update_ops().unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
         match create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -220,7 +221,7 @@ mod tests {
         }
 
         match create_spend_to_address(
-            &mut db_write,
+            db_write,
             &tests::network(),
             test_prover(),
             AccountId(1),
@@ -248,9 +249,9 @@ mod tests {
         let to = extsk.default_address().unwrap().1.into();
 
         // We cannot do anything if we aren't synchronised
-        let mut db_write = db_data.get_update_ops().unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
         match create_spend_to_address(
-            &mut db_write,
+            db_write,
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -289,9 +290,9 @@ mod tests {
         assert_eq!(get_balance(&db_data, AccountId(0)).unwrap(), Amount::zero());
 
         // We cannot spend anything
-        let mut db_write = db_data.get_update_ops().unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
         match create_spend_to_address(
-            &mut db_write,
+            db_write,
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -333,8 +334,8 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        let mut db_write = db_data.get_update_ops().unwrap();
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
 
         // Verified balance matches total balance
         let (_, anchor_height) = (&db_data).get_target_and_anchor_heights().unwrap().unwrap();
@@ -352,7 +353,7 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
 
         // Verified balance does not include the second note
         let (_, anchor_height2) = (&db_data).get_target_and_anchor_heights().unwrap().unwrap();
@@ -366,7 +367,7 @@ mod tests {
         let extsk2 = ExtendedSpendingKey::master(&[]);
         let to = extsk2.default_address().unwrap().1.into();
         match create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -394,11 +395,11 @@ mod tests {
             );
             insert_into_cache(&db_cache, &cb);
         }
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
 
         // Second spend still fails
         match create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -419,11 +420,11 @@ mod tests {
         let (cb, _) =
             fake_compact_block(sapling_activation_height() + 10, cb.hash(), extfvk, value);
         insert_into_cache(&db_cache, &cb);
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(tests::network(), &db_cache, db_write, None).unwrap();
 
         // Second spend should now succeed
         create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -460,15 +461,15 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        let mut db_write = db_data.get_update_ops().unwrap();
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
         assert_eq!(get_balance(&db_data, AccountId(0)).unwrap(), value);
 
         // Send some of the funds to another address
         let extsk2 = ExtendedSpendingKey::master(&[]);
         let to = extsk2.default_address().unwrap().1.into();
         create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -482,7 +483,7 @@ mod tests {
 
         // A second spend fails because there are no usable notes
         match create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -510,11 +511,11 @@ mod tests {
             );
             insert_into_cache(&db_cache, &cb);
         }
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(tests::network(), &db_cache, db_write, None).unwrap();
 
         // Second spend still fails
         match create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -539,11 +540,11 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
 
         // Second spend should now succeed
         create_spend_to_address(
-            &mut db_write,
+            db_write.clone(),
             &tests::network(),
             test_prover(),
             AccountId(0),
@@ -581,17 +582,18 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        let mut db_write = db_data.get_update_ops().unwrap();
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
         assert_eq!(get_balance(&db_data, AccountId(0)).unwrap(), value);
 
         let extsk2 = ExtendedSpendingKey::master(&[]);
         let addr2 = extsk2.default_address().unwrap().1;
         let to = addr2.clone().into();
 
-        let send_and_recover_with_policy = |db_write: &mut DataConnStmtCache<'_, _>, ovk_policy| {
+        let send_and_recover_with_policy = |db_write: Arc<Mutex<DataConnStmtCache<'_, _>>>,
+                                            ovk_policy| {
             let tx_row = create_spend_to_address(
-                db_write,
+                db_write.clone(),
                 &tests::network(),
                 test_prover(),
                 AccountId(0),
@@ -603,8 +605,9 @@ mod tests {
             )
             .unwrap();
 
+            let db_lock = db_write.lock().unwrap();
             // Fetch the transaction from the database
-            let raw_tx: Vec<_> = db_write
+            let raw_tx: Vec<_> = db_lock
                 .wallet_db
                 .conn
                 .query_row(
@@ -617,7 +620,7 @@ mod tests {
             let tx = Transaction::read(&raw_tx[..]).unwrap();
 
             // Fetch the output index from the database
-            let output_index: i64 = db_write
+            let output_index: i64 = db_lock
                 .wallet_db
                 .conn
                 .query_row(
@@ -641,7 +644,7 @@ mod tests {
         // Send some of the funds to another address, keeping history.
         // The recipient output is decryptable by the sender.
         let (_, recovered_to, _) =
-            send_and_recover_with_policy(&mut db_write, OvkPolicy::Sender).unwrap();
+            send_and_recover_with_policy(db_write.clone(), OvkPolicy::Sender).unwrap();
         assert_eq!(&recovered_to, &addr2);
 
         // Mine blocks SAPLING_ACTIVATION_HEIGHT + 1 to 22 (that don't send us funds)
@@ -655,11 +658,11 @@ mod tests {
             );
             insert_into_cache(&db_cache, &cb);
         }
-        scan_cached_blocks(&network, &db_cache, &mut db_write, None).unwrap();
+        scan_cached_blocks(network, &db_cache, db_write.clone(), None).unwrap();
 
         // Send the funds again, discarding history.
         // Neither transaction output is decryptable by the sender.
-        assert!(send_and_recover_with_policy(&mut db_write, OvkPolicy::Discard).is_none());
+        assert!(send_and_recover_with_policy(db_write, OvkPolicy::Discard).is_none());
     }
 
     #[test]
@@ -686,8 +689,8 @@ mod tests {
             value,
         );
         insert_into_cache(&db_cache, &cb);
-        let mut db_write = db_data.get_update_ops().unwrap();
-        scan_cached_blocks(&tests::network(), &db_cache, &mut db_write, None).unwrap();
+        let mut db_write = Arc::new(Mutex::new(db_data.get_update_ops().unwrap()));
+        scan_cached_blocks(tests::network(), &db_cache, db_write.clone(), None).unwrap();
 
         // Verified balance matches total balance
         let (_, anchor_height) = (&db_data).get_target_and_anchor_heights().unwrap().unwrap();
@@ -699,7 +702,7 @@ mod tests {
 
         let to = TransparentAddress::PublicKey([7; 20]).into();
         create_spend_to_address(
-            &mut db_write,
+            db_write,
             &tests::network(),
             test_prover(),
             AccountId(0),

@@ -252,37 +252,11 @@ pub trait WalletWrite: WalletRead {
 
 /// This trait provides sequential access to raw blockchain data via a callback-oriented
 /// API.
-#[cfg(not(feature = "wasm-extra"))]
+#[async_trait::async_trait(?Send)]
 pub trait BlockSource {
     type Error;
 
-    fn with_blocks<F>(
-        &self,
-        from_height: BlockHeight,
-        limit: Option<u32>,
-        with_row: F,
-    ) -> Result<(), Self::Error>
-    where
-        F: FnMut(CompactBlock) -> Result<(), Self::Error>;
-}
-
-#[cfg(feature = "wasm-extra")]
-#[async_trait::async_trait]
-pub trait BlockSource {
-    type Error;
-
-    #[cfg(feature = "wasm-extra")]
     async fn with_blocks<F>(
-        &self,
-        from_height: BlockHeight,
-        limit: Option<u32>,
-        with_row: F,
-    ) -> Result<(), Self::Error>
-    where
-        F: FnMut(CompactBlock) -> Result<(), Self::Error>;
-
-    #[cfg(not(feature = "wasm-extra"))]
-    fn with_blocks<F>(
         &self,
         from_height: BlockHeight,
         limit: Option<u32>,
@@ -318,17 +292,18 @@ pub mod testing {
 
     pub struct MockBlockSource {}
 
+    #[async_trait::async_trait]
     impl BlockSource for MockBlockSource {
         type Error = Error<u32>;
 
-        fn with_blocks<F>(
+        async fn with_blocks<F>(
             &self,
             _from_height: BlockHeight,
             _limit: Option<u32>,
             _with_row: F,
         ) -> Result<(), Self::Error>
         where
-            F: FnMut(CompactBlock) -> Result<(), Self::Error>,
+            F: FnMut(CompactBlock) -> Result<(), Self::Error> + Send,
         {
             Ok(())
         }

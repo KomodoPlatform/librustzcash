@@ -25,6 +25,7 @@ libsqlite3-sys= { version = "0.25.2", features = ["bundled"] }
 time = "0.3"
 zcash_client_backend = { version = "0.5", path = "../zcash_client_backend" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
+async-trait = "0.1.68"
 
 [dev-dependencies]
 rand_core = "0.5.1"

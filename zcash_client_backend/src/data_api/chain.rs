@@ -35,6 +35,7 @@
 //! # }
 //! #
 //! # fn test() -> Result<(), SqliteClientError> {
+//! use std::sync::{Arc, Mutex};
 //! let network = Network::TestNetwork;
 //! let cache_file = NamedTempFile::new()?;
 //! let db_cache = BlockDb::for_path(cache_file)?;
@@ -42,8 +43,8 @@
 //! let db_read = WalletDb::for_path(db_file, network)?;
 //! init_wallet_db(&db_read)?;
 //!
-//! let mut db_data = db_read.get_update_ops()?;
-//!
+//! let  db_data = Arc::new(Mutex::new(db_read.get_update_ops()?));
+//! let mut db_data = db_data.lock().unwrap();
 //! // 1) Download new CompactBlocks into db_cache.
 //!
 //! // 2) Run the chain validator on the received blocks.
@@ -85,11 +86,13 @@
 //! // At this point, the cache and scanned data are locally consistent (though not
 //! // necessarily consistent with the latest chain tip - this would be discovered the
 //! // next time this codepath is executed after new blocks are received).
-//! scan_cached_blocks(&network, &db_cache, &mut db_data, None)
+//! scan_cached_blocks(&network, &db_cache, db_data, None)
 //! # }
 //! ```
 
+use futures::executor::block_on;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
 use zcash_primitives::{
     block::BlockHash,
@@ -155,8 +158,7 @@ where
 
     let mut prev_height = from_height;
     let mut prev_hash: Option<BlockHash> = validate_from.map(|(_, hash)| hash);
-
-    cache.with_blocks(from_height, None, move |block| {
+    let mut with_row = move |block: CompactBlock| {
         let current_height = block.height();
         let result = if current_height != prev_height + 1 {
             Err(ChainInvalid::block_height_discontinuity(
@@ -174,7 +176,9 @@ where
         prev_height = current_height;
         prev_hash = Some(block.hash());
         result.map_err(E::from)
-    })
+    };
+
+    block_on(cache.with_blocks(from_height, None, move |block| with_row(block)))
 }
 
 #[allow(clippy::needless_doctest_main)]
@@ -224,6 +228,7 @@ where
 /// # }
 /// #
 /// # fn test() -> Result<(), SqliteClientError> {
+/// use std::sync::{Arc, Mutex};
 /// let cache_file = NamedTempFile::new().unwrap();
 /// let cache = BlockDb::for_path(cache_file).unwrap();
 ///
@@ -231,15 +236,15 @@ where
 /// let db_read = WalletDb::for_path(data_file, Network::TestNetwork)?;
 /// init_wallet_db(&db_read)?;
 ///
-/// let mut data = db_read.get_update_ops()?;
-/// scan_cached_blocks(&Network::TestNetwork, &cache, &mut data, None)?;
+/// let  data = Arc::new(Mutex::new(db_read.get_update_ops()?));
+/// scan_cached_blocks(&Network::TestNetwork, &cache, data, None)?;
 /// # Ok(())
 /// # }
 /// ```
 pub fn scan_cached_blocks<E, N, P, C, D>(
-    params: &P,
+    params: P,
     cache: &C,
-    data: &mut D,
+    data: Arc<Mutex<D>>,
     limit: Option<u32>,
 ) -> Result<(), E>
 where
@@ -249,33 +254,36 @@ where
     N: Copy + Debug,
     E: From<Error<N>>,
 {
+    let data_lock = data.lock().unwrap();
     let sapling_activation_height = params
         .activation_height(NetworkUpgrade::Sapling)
         .ok_or(Error::SaplingNotActive)?;
 
     // Recall where we synced up to previously.
     // If we have never synced, use sapling activation height to select all cached CompactBlocks.
-    let mut last_height = data.block_height_extrema().map(|opt| {
+    let mut last_height = data_lock.block_height_extrema().map(|opt| {
         opt.map(|(_, max)| max)
             .unwrap_or(sapling_activation_height - 1)
     })?;
 
     // Fetch the ExtendedFullViewingKeys we are tracking
-    let extfvks = data.get_extended_full_viewing_keys()?;
+    let extfvks = data_lock.get_extended_full_viewing_keys()?;
     let extfvks: Vec<(&AccountId, &ExtendedFullViewingKey)> = extfvks.iter().collect();
 
     // Get the most recent CommitmentTree
-    let mut tree = data
+    let mut tree = data_lock
         .get_commitment_tree(last_height)
         .map(|t| t.unwrap_or_else(CommitmentTree::empty))?;
 
     // Get most recent incremental witnesses for the notes we are tracking
-    let mut witnesses = data.get_witnesses(last_height)?;
+    let mut witnesses = data_lock.get_witnesses(last_height)?;
 
     // Get the nullifiers for the notes we are tracking
-    let mut nullifiers = data.get_nullifiers()?;
+    let mut nullifiers = data_lock.get_nullifiers()?;
 
-    cache.with_blocks(last_height, limit, |block: CompactBlock| {
+    let data_clone = data.clone();
+    let mut with_row = move |block: CompactBlock| {
+        let mut data_clone = data_clone.lock().unwrap();
         let current_height = block.height();
 
         // Scanned blocks MUST be height-sequential.
@@ -290,9 +298,8 @@ where
 
         let txs: Vec<WalletTx<Nullifier>> = {
             let mut witness_refs: Vec<_> = witnesses.iter_mut().map(|w| &mut w.1).collect();
-
             scan_block(
-                params,
+                &params,
                 block,
                 &extfvks,
                 &nullifiers,
@@ -325,7 +332,7 @@ where
             }
         }
 
-        let new_witnesses = data.advance_by_block(
+        let new_witnesses = data_clone.advance_by_block(
             &(PrunedBlock {
                 block_height: current_height,
                 block_hash,
@@ -351,7 +358,9 @@ where
         last_height = current_height;
 
         Ok(())
-    })?;
+    };
+
+    block_on(cache.with_blocks(last_height, limit, |block: CompactBlock| with_row(block)))?;
 
     Ok(())
 }

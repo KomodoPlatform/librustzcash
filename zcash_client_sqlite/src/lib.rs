@@ -525,6 +525,9 @@ impl<'a, P: consensus::Parameters> WalletWrite for DataConnStmtCache<'a, P> {
 /// A wrapper for the SQLite connection to the block cache database.
 pub struct BlockDb(Connection);
 
+unsafe impl Send for BlockDb {}
+unsafe impl Sync for BlockDb {}
+
 impl BlockDb {
     /// Opens a connection to the wallet database stored at the specified path.
     pub fn for_path<P: AsRef<Path>>(path: P) -> Result<Self, rusqlite::Error> {
@@ -532,10 +535,11 @@ impl BlockDb {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl BlockSource for BlockDb {
     type Error = SqliteClientError;
 
-    fn with_blocks<F>(
+    async fn with_blocks<F>(
         &self,
         from_height: BlockHeight,
         limit: Option<u32>,

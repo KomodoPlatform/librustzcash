@@ -1,5 +1,6 @@
 //! Functions for scanning the chain and extracting relevant information.
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
 use zcash_primitives::{
     consensus::{self, BranchId, NetworkUpgrade},
@@ -115,6 +116,7 @@ where
 /// # }
 /// #
 /// # fn test() -> Result<(), SqliteClientError> {
+/// use std::sync::{Arc, Mutex};
 /// let tx_prover = match LocalTxProver::with_default_location() {
 ///     Some(tx_prover) => tx_prover,
 ///     None => {
@@ -129,10 +131,10 @@ where
 /// let data_file = NamedTempFile::new().unwrap();
 /// let db_read = WalletDb::for_path(data_file, Network::TestNetwork).unwrap();
 /// init_wallet_db(&db_read)?;
-/// let mut db = db_read.get_update_ops()?;
+/// let mut db = Arc::new(Mutex::new(db_read.get_update_ops()?));
 ///
 /// create_spend_to_address(
-///     &mut db,
+///     db,
 ///     &Network::TestNetwork,
 ///     tx_prover,
 ///     account,
@@ -148,7 +150,7 @@ where
 /// ```
 #[allow(clippy::too_many_arguments)]
 pub fn create_spend_to_address<E, N, P, D, R>(
-    wallet_db: &mut D,
+    wallet_db: Arc<Mutex<D>>,
     params: &P,
     prover: impl TxProver,
     account: AccountId,
@@ -164,6 +166,7 @@ where
     R: Copy + Debug,
     D: WalletWrite<Error = E, TxRef = R>,
 {
+    let mut wallet_db = wallet_db.lock().unwrap();
     // Check that the ExtendedSpendingKey we have been given corresponds to the
     // ExtendedFullViewingKey for the account we are spending from.
     let extfvk = ExtendedFullViewingKey::from(extsk);
