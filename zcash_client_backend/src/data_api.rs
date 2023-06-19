@@ -256,6 +256,8 @@ pub trait WalletWrite: WalletRead {
 pub trait BlockSource {
     type Error;
 
+    /// Scan the specified `limit` number of blocks from the blockchain, starting at
+    /// `from_height`, applying the provided callback to each block.
     async fn with_blocks<F>(
         &self,
         from_height: BlockHeight,

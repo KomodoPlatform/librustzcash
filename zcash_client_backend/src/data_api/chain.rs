@@ -158,6 +158,7 @@ where
 
     let mut prev_height = from_height;
     let mut prev_hash: Option<BlockHash> = validate_from.map(|(_, hash)| hash);
+
     let mut with_row = move |block: CompactBlock| {
         let current_height = block.height();
         let result = if current_height != prev_height + 1 {
@@ -177,7 +178,6 @@ where
         prev_hash = Some(block.hash());
         result.map_err(E::from)
     };
-
     block_on(cache.with_blocks(from_height, None, move |block| with_row(block)))
 }
 
@@ -283,7 +283,7 @@ where
 
     let data_clone = data.clone();
     let mut with_row = move |block: CompactBlock| {
-        let mut data_clone = data_clone.lock().unwrap();
+        let mut data_lock = data_clone.lock().unwrap();
         let current_height = block.height();
 
         // Scanned blocks MUST be height-sequential.
@@ -332,7 +332,7 @@ where
             }
         }
 
-        let new_witnesses = data_clone.advance_by_block(
+        let new_witnesses = data_lock.advance_by_block(
             &(PrunedBlock {
                 block_height: current_height,
                 block_hash,
@@ -359,7 +359,6 @@ where
 
         Ok(())
     };
-
     block_on(cache.with_blocks(last_height, limit, |block: CompactBlock| with_row(block)))?;
 
     Ok(())
