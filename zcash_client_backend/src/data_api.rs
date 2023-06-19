@@ -292,7 +292,7 @@ pub mod testing {
 
     pub struct MockBlockSource {}
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl BlockSource for MockBlockSource {
         type Error = Error<u32>;
 
@@ -303,7 +303,7 @@ pub mod testing {
             _with_row: F,
         ) -> Result<(), Self::Error>
         where
-            F: FnMut(CompactBlock) -> Result<(), Self::Error> + Send,
+            F: FnMut(CompactBlock) -> Result<(), Self::Error>,
         {
             Ok(())
         }
