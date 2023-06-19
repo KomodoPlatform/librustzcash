@@ -31,7 +31,7 @@ time = "0.3"
 zcash_note_encryption = { version = "0.0", path = "../components/zcash_note_encryption" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
 async-trait = "0.1.0"
-futures = "0.3.28"
+futures = "0.3"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.20"
