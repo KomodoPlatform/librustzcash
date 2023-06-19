@@ -13,11 +13,13 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.52"
 bech32 = "0.9.1"
 bls12_381 = "0.3.1"
 bs58 = { version = "0.4", features = ["check"] }
 base64 = "0.13"
 ff = "0.8"
+futures = "0.3"
 group = "0.8"
 hex = "0.4"
 jubjub = "0.5.1"
@@ -30,8 +32,6 @@ subtle = "2.2.3"
 time = "0.3"
 zcash_note_encryption = { version = "0.0", path = "../components/zcash_note_encryption" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
-async-trait = "0.1.0"
-futures = "0.3"
 
 [build-dependencies]
 protobuf-codegen-pure = "2.20"

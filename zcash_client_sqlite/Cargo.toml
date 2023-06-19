@@ -13,6 +13,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.52"
 bech32 = "0.9.1"
 bs58 = { version = "0.4", features = ["check"] }
 ff = "0.8"
@@ -25,7 +26,6 @@ libsqlite3-sys= { version = "0.25.2", features = ["bundled"] }
 time = "0.3"
 zcash_client_backend = { version = "0.5", path = "../zcash_client_backend" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
-async-trait = "0.1.68"
 
 [dev-dependencies]
 rand_core = "0.5.1"
