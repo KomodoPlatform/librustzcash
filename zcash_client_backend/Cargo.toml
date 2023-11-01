@@ -19,7 +19,6 @@ bls12_381 = "0.3.1"
 bs58 = { version = "0.4", features = ["check"] }
 base64 = "0.13"
 ff = "0.8"
-futures = { version = "0.3", package = "futures", features = ["compat", "async-await"] }
 group = "0.8"
 hex = "0.4"
 jubjub = "0.5.1"

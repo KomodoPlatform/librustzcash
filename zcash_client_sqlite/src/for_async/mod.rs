@@ -3,6 +3,7 @@ pub mod wallet_actions;
 
 use std::collections::HashMap;
 use std::path::Path;
+use tokio::task::block_in_place;
 use zcash_client_backend::data_api::{PrunedBlock, ReceivedTransaction, SentTransaction};
 use zcash_client_backend::wallet::{AccountId, SpendableNote};
 use zcash_extras::{WalletRead, WalletWrite};
@@ -225,44 +226,6 @@ pub struct DataConnStmtCacheAsync<P> {
     wallet_db: WalletDbAsync<P>,
 }
 
-impl<P: consensus::Parameters> DataConnStmtCacheAsync<P> {
-    fn transactionally<F, A>(&mut self, f: F) -> Result<A, SqliteClientError>
-    where
-        F: FnOnce(&mut Self) -> Result<A, SqliteClientError>,
-    {
-        self.wallet_db
-            .inner
-            .lock()
-            .unwrap()
-            .conn
-            .execute("BEGIN IMMEDIATE", [])?;
-        match f(self) {
-            Ok(result) => {
-                self.wallet_db
-                    .inner
-                    .lock()
-                    .unwrap()
-                    .conn
-                    .execute("COMMIT", [])?;
-                Ok(result)
-            }
-            Err(error) => {
-                match self.wallet_db.inner.lock().unwrap().conn.execute("ROLLBACK", []) {
-                       Ok(_) => Err(error),
-                       Err(e) =>
-                       // Panicking here is probably the right thing to do, because it
-                       // means the database is corrupt.
-                           panic!(
-                               "Rollback failed with error {} while attempting to recover from error {}; database is likely corrupt.",
-                               e,
-                               error
-                           )
-                   }
-            }
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl<P: consensus::Parameters + Send + Sync + 'static> WalletRead for DataConnStmtCacheAsync<P> {
     type Error = SqliteClientError;
@@ -367,114 +330,36 @@ impl<P: consensus::Parameters + Send + Sync + 'static> WalletWrite for DataConnS
         block: &PrunedBlock,
         updated_witnesses: &[(Self::NoteRef, IncrementalWitness<Node>)],
     ) -> Result<Vec<(Self::NoteRef, IncrementalWitness<Node>)>, Self::Error> {
+        use zcash_client_backend::data_api::WalletWrite;
+
         // database updates for each block are transactional
-        self.transactionally(|up| {
-            let db = up.wallet_db.inner.lock().unwrap();
-            // Insert the block into the database.
-            wallet_actions::insert_block(
-                &db,
-                block.block_height,
-                block.block_hash,
-                block.block_time,
-                block.commitment_tree,
-            )?;
-
-            let mut new_witnesses = vec![];
-            for tx in block.transactions {
-                let tx_row = wallet_actions::put_tx_meta(&db, tx, block.block_height)?;
-
-                // Mark notes as spent and remove them from the scanning cache
-                for spend in &tx.shielded_spends {
-                    wallet_actions::mark_spent(&db, tx_row, &spend.nf)?;
-                }
-
-                for output in &tx.shielded_outputs {
-                    let received_note_id = wallet_actions::put_received_note(&db, output, tx_row)?;
-
-                    // Save witness for note.
-                    new_witnesses.push((received_note_id, output.witness.clone()));
-                }
-            }
-
-            // Insert current new_witnesses into the database.
-            for (received_note_id, witness) in updated_witnesses.iter().chain(new_witnesses.iter())
-            {
-                if let NoteId::ReceivedNoteId(rnid) = *received_note_id {
-                    wallet_actions::insert_witness(&db, rnid, witness, block.block_height)?;
-                } else {
-                    return Err(SqliteClientError::InvalidNoteId);
-                }
-            }
-
-            // Prune the stored witnesses (we only expect rollbacks of at most 100 blocks).
-            let below_height = if block.block_height < BlockHeight::from(100) {
-                BlockHeight::from(0)
-            } else {
-                block.block_height - 100
-            };
-            wallet_actions::prune_witnesses(&db, below_height)?;
-
-            // Update now-expired transactions that didn't get mined.
-            wallet_actions::update_expired_notes(&db, block.block_height)?;
-
-            Ok(new_witnesses)
-        })
+        let db = self.wallet_db.inner.lock().unwrap();
+        let mut update_ops = db.get_update_ops()?;
+        block_in_place(|| update_ops.advance_by_block(&block, updated_witnesses))
     }
 
     async fn store_received_tx(
         &mut self,
         received_tx: &ReceivedTransaction,
     ) -> Result<Self::TxRef, Self::Error> {
-        self.transactionally(|up| {
-            let db = up.wallet_db.inner.lock().unwrap();
-            let tx_ref = wallet_actions::put_tx_data(&db, received_tx.tx, None)?;
+        use zcash_client_backend::data_api::WalletWrite;
 
-            for output in received_tx.outputs {
-                if output.outgoing {
-                    wallet_actions::put_sent_note(&db, output, tx_ref)?;
-                } else {
-                    wallet_actions::put_received_note(&db, output, tx_ref)?;
-                }
-            }
-
-            Ok(tx_ref)
-        })
+        // database updates for each block are transactional
+        let db = self.wallet_db.inner.lock().unwrap();
+        let mut update_ops = db.get_update_ops()?;
+        block_in_place(|| update_ops.store_received_tx(&received_tx))
     }
 
     async fn store_sent_tx(
         &mut self,
         sent_tx: &SentTransaction,
     ) -> Result<Self::TxRef, Self::Error> {
+        use zcash_client_backend::data_api::WalletWrite;
+
         // Update the database atomically, to ensure the result is internally consistent.
-        self.transactionally(|up| {
-            let db = up.wallet_db.inner.lock().unwrap();
-            let tx_ref = wallet_actions::put_tx_data(&db, sent_tx.tx, Some(sent_tx.created))?;
-
-            // Mark notes as spent.
-            //
-            // This locks the notes so they aren't selected again by a subsequent call to
-            // create_spend_to_address() before this transaction has been mined (at which point the notes
-            // get re-marked as spent).
-            //
-            // Assumes that create_spend_to_address() will never be called in parallel, which is a
-            // reasonable assumption for a light client such as a mobile phone.
-            for spend in &sent_tx.tx.shielded_spends {
-                wallet_actions::mark_spent(&db, tx_ref, &spend.nullifier)?;
-            }
-
-            wallet_actions::insert_sent_note(
-                &db,
-                tx_ref,
-                sent_tx.output_index,
-                sent_tx.account,
-                sent_tx.recipient_address,
-                sent_tx.value,
-                sent_tx.memo.as_ref(),
-            )?;
-
-            // Return the row number of the transaction, so the caller can fetch it for sending.
-            Ok(tx_ref)
-        })
+        let db = self.wallet_db.inner.lock().unwrap();
+        let mut update_ops = db.get_update_ops()?;
+        block_in_place(|| update_ops.store_sent_tx(&sent_tx))
     }
 
     async fn rewind_to_height(&mut self, block_height: BlockHeight) -> Result<(), Self::Error> {
