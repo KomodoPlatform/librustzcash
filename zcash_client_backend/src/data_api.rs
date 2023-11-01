@@ -178,7 +178,6 @@ pub trait WalletRead {
 
 /// The subset of information that is relevant to this wallet that has been
 /// decrypted and extracted from a [CompactBlock].
-#[derive(Clone)]
 pub struct PrunedBlock<'a> {
     pub block_height: BlockHeight,
     pub block_hash: BlockHash,

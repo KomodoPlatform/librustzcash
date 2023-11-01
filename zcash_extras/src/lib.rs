@@ -280,21 +280,9 @@ impl fmt::Display for NoteId {
         }
     }
 }
-#[cfg(feature = "mainnet")]
-pub(crate) fn network() -> Network {
-    Network::MainNetwork
-}
 
-#[cfg(not(feature = "mainnet"))]
-pub(crate) fn network() -> Network {
+pub(crate) fn test_network() -> Network {
     Network::TestNetwork
-}
-
-#[cfg(feature = "mainnet")]
-pub(crate) fn sapling_activation_height() -> BlockHeight {
-    Network::MainNetwork
-        .activation_height(NetworkUpgrade::Sapling)
-        .unwrap()
 }
 
 /// Create a fake CompactBlock at the given height, containing a single output paying
@@ -309,7 +297,7 @@ pub fn fake_compact_block(
 
     // Create a fake Note for the account
     let mut rng = OsRng;
-    let rseed = generate_random_rseed(&network(), height, &mut rng);
+    let rseed = generate_random_rseed(&test_network(), height, &mut rng);
     let note = Note {
         g_d: to.diversifier().g_d().unwrap(),
         pk_d: *to.pk_d(),
@@ -357,7 +345,7 @@ pub fn fake_compact_block_spending(
     value: Amount,
 ) -> CompactBlock {
     let mut rng = OsRng;
-    let rseed = generate_random_rseed(&network(), height, &mut rng);
+    let rseed = generate_random_rseed(&test_network(), height, &mut rng);
 
     // Create a fake CompactBlock containing the note
     let mut cspend = CompactSpend::new();
@@ -397,7 +385,7 @@ pub fn fake_compact_block_spending(
     // Create a fake Note for the change
     ctx.outputs.push({
         let change_addr = extfvk.default_address().unwrap().1;
-        let rseed = generate_random_rseed(&network(), height, &mut rng);
+        let rseed = generate_random_rseed(&test_network(), height, &mut rng);
         let note = Note {
             g_d: change_addr.diversifier().g_d().unwrap(),
             pk_d: *change_addr.pk_d(),

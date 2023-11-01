@@ -1,6 +1,8 @@
 //! Functions for scanning the chain and extracting relevant information.
 use std::fmt::Debug;
 
+use zcash_primitives::consensus::NetworkUpgrade;
+use zcash_primitives::transaction::Transaction;
 use zcash_primitives::{
     consensus::{self, BranchId},
     memo::MemoBytes,
@@ -12,13 +14,53 @@ use zcash_primitives::{
     zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
 };
 
+use crate::data_api::ReceivedTransaction;
 use crate::{
     address::RecipientAddress,
     data_api::{error::Error, SentTransaction, WalletWrite},
+    decrypt_transaction,
     wallet::{AccountId, OvkPolicy},
 };
 
 pub const ANCHOR_OFFSET: u32 = 10;
+
+/// Scans a [`Transaction`] for any information that can be decrypted by the accounts in
+/// the wallet, and saves it to the wallet.
+pub fn decrypt_and_store_transaction<N, E, P, D>(
+    params: &P,
+    data: &mut D,
+    tx: &Transaction,
+) -> Result<(), E>
+where
+    E: From<Error<N>>,
+    P: consensus::Parameters,
+    D: WalletWrite<Error = E>,
+{
+    // Fetch the ExtendedFullViewingKeys we are tracking
+    let extfvks = data.get_extended_full_viewing_keys()?;
+
+    // Height is block height for mined transactions, and the "mempool height" (chain height + 1)
+    // for mempool transactions.
+    let height = data
+        .get_tx_height(tx.txid())?
+        .or(data
+            .block_height_extrema()?
+            .map(|(_, max_height)| max_height + 1))
+        .or_else(|| params.activation_height(NetworkUpgrade::Sapling))
+        .ok_or(Error::SaplingNotActive)?;
+
+    let outputs = decrypt_transaction(params, height, tx, &extfvks);
+    if outputs.is_empty() {
+        Ok(())
+    } else {
+        data.store_received_tx(&ReceivedTransaction {
+            tx,
+            outputs: &outputs,
+        })?;
+
+        Ok(())
+    }
+}
 
 #[allow(clippy::needless_doctest_main)]
 /// Creates a transaction paying the specified address from the given account.

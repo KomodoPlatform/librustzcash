@@ -53,7 +53,6 @@ zcash_proofs = { version = "0.5", path = "../zcash_proofs" }
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 zcash_proofs = { version = "0.5", path = "../zcash_proofs", default-features = false, features = ["local-prover"]}
 
-
 [features]
 test-dependencies = ["proptest", "zcash_primitives/test-dependencies"]
 

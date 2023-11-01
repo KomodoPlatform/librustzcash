@@ -4,6 +4,7 @@ pub mod wallet_actions;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::task::block_in_place;
+use zcash_client_backend::data_api::WalletWrite as WalletWriteSync;
 use zcash_client_backend::data_api::{PrunedBlock, ReceivedTransaction, SentTransaction};
 use zcash_client_backend::wallet::{AccountId, SpendableNote};
 use zcash_extras::{WalletRead, WalletWrite};
@@ -330,36 +331,37 @@ impl<P: consensus::Parameters + Send + Sync + 'static> WalletWrite for DataConnS
         block: &PrunedBlock,
         updated_witnesses: &[(Self::NoteRef, IncrementalWitness<Node>)],
     ) -> Result<Vec<(Self::NoteRef, IncrementalWitness<Node>)>, Self::Error> {
-        use zcash_client_backend::data_api::WalletWrite;
-
         // database updates for each block are transactional
-        let db = self.wallet_db.inner.lock().unwrap();
-        let mut update_ops = db.get_update_ops()?;
-        block_in_place(|| update_ops.advance_by_block(&block, updated_witnesses))
+        block_in_place(|| {
+            let db = self.wallet_db.inner.lock().unwrap();
+            let mut update_ops = db.get_update_ops()?;
+            update_ops.advance_by_block(&block, updated_witnesses)
+        })
     }
 
     async fn store_received_tx(
         &mut self,
         received_tx: &ReceivedTransaction,
     ) -> Result<Self::TxRef, Self::Error> {
-        use zcash_client_backend::data_api::WalletWrite;
-
         // database updates for each block are transactional
-        let db = self.wallet_db.inner.lock().unwrap();
-        let mut update_ops = db.get_update_ops()?;
-        block_in_place(|| update_ops.store_received_tx(&received_tx))
+        block_in_place(|| {
+            let db = self.wallet_db.inner.lock().unwrap();
+            let mut update_ops = db.get_update_ops()?;
+            update_ops.store_received_tx(&received_tx)
+        })
     }
 
     async fn store_sent_tx(
         &mut self,
         sent_tx: &SentTransaction,
     ) -> Result<Self::TxRef, Self::Error> {
-        use zcash_client_backend::data_api::WalletWrite;
-
         // Update the database atomically, to ensure the result is internally consistent.
-        let db = self.wallet_db.inner.lock().unwrap();
-        let mut update_ops = db.get_update_ops()?;
-        block_in_place(|| update_ops.store_sent_tx(&sent_tx))
+
+        block_in_place(|| {
+            let db = self.wallet_db.inner.lock().unwrap();
+            let mut update_ops = db.get_update_ops()?;
+            update_ops.store_sent_tx(&sent_tx)
+        })
     }
 
     async fn rewind_to_height(&mut self, block_height: BlockHeight) -> Result<(), Self::Error> {

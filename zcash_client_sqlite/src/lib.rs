@@ -35,7 +35,6 @@
 extern crate core;
 
 use std::collections::HashMap;
-//use std::fmt;
 use std::path::Path;
 
 use rusqlite::{Connection, Statement};
