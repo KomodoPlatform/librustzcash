@@ -21,9 +21,9 @@ use crate::{default_params_folder, SAPLING_OUTPUT_NAME, SAPLING_SPEND_NAME};
 /// An implementation of [`TxProver`] using Sapling Spend and Output parameters from
 /// locally-accessible paths.
 pub struct LocalTxProver {
-    pub spend_params: Parameters<Bls12>,
-    pub spend_vk: PreparedVerifyingKey<Bls12>,
-    pub output_params: Parameters<Bls12>,
+    spend_params: Parameters<Bls12>,
+    spend_vk: PreparedVerifyingKey<Bls12>,
+    output_params: Parameters<Bls12>,
 }
 
 impl LocalTxProver {
