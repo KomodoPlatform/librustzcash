@@ -12,7 +12,7 @@ pub async fn init_wallet_db<P: consensus::Parameters + 'static>(
 where
     P: Clone + Send + Sync,
 {
-    let wdb = wdb.inner.clone();
+    let wdb = wdb.inner();
     async_blocking(move || {
         let wdb = wdb.lock().unwrap();
         wallet::init::init_wallet_db(&wdb)
@@ -27,9 +27,8 @@ pub async fn init_accounts_table<P: consensus::Parameters + 'static>(
 where
     P: Clone + Send + Sync,
 {
-    let wdb = wdb.inner.clone();
+    let wdb = wdb.inner();
     let extfvks = extfvks.to_vec();
-
     async_blocking(move || {
         let wdb = wdb.lock().unwrap();
         wallet::init::init_accounts_table(&wdb, &extfvks)
@@ -47,9 +46,8 @@ pub async fn init_blocks_table<P: consensus::Parameters + 'static>(
 where
     P: Clone + Send + Sync,
 {
-    let wdb = wdb.inner.clone();
-    let sapling_tree = sapling_tree.to_vec().clone();
-
+    let wdb = wdb.inner();
+    let sapling_tree = sapling_tree.to_vec();
     async_blocking(move || {
         let wdb = wdb.lock().unwrap();
         wallet::init::init_blocks_table(&wdb, height, hash, time, &sapling_tree)
