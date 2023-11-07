@@ -2,13 +2,12 @@
 use std::fmt::{Debug, Display};
 
 use zcash_primitives::{
-    consensus::{self, BranchId, NetworkUpgrade},
+    consensus::{self, BranchId},
     memo::MemoBytes,
     sapling::prover::TxProver,
     transaction::{
         builder::Builder,
         components::{amount::DEFAULT_FEE, Amount},
-        Transaction,
     },
     zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
 };
@@ -16,8 +15,7 @@ use zcash_primitives::{
 use crate::WalletWrite;
 use zcash_client_backend::{
     address::RecipientAddress,
-    data_api::{error::Error, ReceivedTransaction, SentTransaction},
-    decrypt_transaction,
+    data_api::{error::Error, SentTransaction},
     wallet::{AccountId, OvkPolicy},
 };
 

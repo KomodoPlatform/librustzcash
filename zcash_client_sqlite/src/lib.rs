@@ -544,27 +544,12 @@ fn address_from_extfvk<P: consensus::Parameters>(
 
 #[cfg(test)]
 mod tests {
-    use ff::PrimeField;
-    use group::GroupEncoding;
     use protobuf::Message;
-    use rand_core::{OsRng, RngCore};
     use rusqlite::params;
 
-    use zcash_client_backend::proto::compact_formats::{
-        CompactBlock, CompactOutput, CompactSpend, CompactTx,
-    };
+    use zcash_client_backend::proto::compact_formats::CompactBlock;
 
-    use zcash_primitives::{
-        block::BlockHash,
-        consensus::{BlockHeight, Network, NetworkUpgrade, Parameters},
-        memo::MemoBytes,
-        sapling::{
-            note_encryption::sapling_note_encryption, util::generate_random_rseed, Note, Nullifier,
-            PaymentAddress,
-        },
-        transaction::components::Amount,
-        zip32::ExtendedFullViewingKey,
-    };
+    use zcash_primitives::consensus::{BlockHeight, Network, NetworkUpgrade, Parameters};
 
     use super::BlockDb;
 
@@ -590,140 +575,6 @@ mod tests {
         Network::TestNetwork
             .activation_height(NetworkUpgrade::Sapling)
             .unwrap()
-    }
-
-    /// Create a fake CompactBlock at the given height, containing a single output paying
-    /// the given address. Returns the CompactBlock and the nullifier for the new note.
-    pub fn fake_compact_block(
-        height: BlockHeight,
-        prev_hash: BlockHash,
-        extfvk: ExtendedFullViewingKey,
-        value: Amount,
-    ) -> (CompactBlock, Nullifier) {
-        let to = extfvk.default_address().unwrap().1;
-
-        // Create a fake Note for the account
-        let mut rng = OsRng;
-        let rseed = generate_random_rseed(&network(), height, &mut rng);
-        let note = Note {
-            g_d: to.diversifier().g_d().unwrap(),
-            pk_d: *to.pk_d(),
-            value: value.into(),
-            rseed,
-        };
-        let encryptor = sapling_note_encryption::<_, Network>(
-            Some(extfvk.fvk.ovk),
-            note.clone(),
-            to,
-            MemoBytes::empty(),
-            &mut rng,
-        );
-        let cmu = note.cmu().to_repr().as_ref().to_vec();
-        let epk = encryptor.epk().to_bytes().to_vec();
-        let enc_ciphertext = encryptor.encrypt_note_plaintext();
-
-        // Create a fake CompactBlock containing the note
-        let mut cout = CompactOutput::new();
-        cout.set_cmu(cmu);
-        cout.set_epk(epk);
-        cout.set_ciphertext(enc_ciphertext.as_ref()[..52].to_vec());
-        let mut ctx = CompactTx::new();
-        let mut txid = vec![0; 32];
-        rng.fill_bytes(&mut txid);
-        ctx.set_hash(txid);
-        ctx.outputs.push(cout);
-        let mut cb = CompactBlock::new();
-        cb.set_height(u64::from(height));
-        cb.hash.resize(32, 0);
-        rng.fill_bytes(&mut cb.hash);
-        cb.prevHash.extend_from_slice(&prev_hash.0);
-        cb.vtx.push(ctx);
-        (cb, note.nf(&extfvk.fvk.vk, 0))
-    }
-
-    /// Create a fake CompactBlock at the given height, spending a single note from the
-    /// given address.
-    pub fn fake_compact_block_spending(
-        height: BlockHeight,
-        prev_hash: BlockHash,
-        (nf, in_value): (Nullifier, Amount),
-        extfvk: ExtendedFullViewingKey,
-        to: PaymentAddress,
-        value: Amount,
-    ) -> CompactBlock {
-        let mut rng = OsRng;
-        let rseed = generate_random_rseed(&network(), height, &mut rng);
-
-        // Create a fake CompactBlock containing the note
-        let mut cspend = CompactSpend::new();
-        cspend.set_nf(nf.to_vec());
-        let mut ctx = CompactTx::new();
-        let mut txid = vec![0; 32];
-        rng.fill_bytes(&mut txid);
-        ctx.set_hash(txid);
-        ctx.spends.push(cspend);
-
-        // Create a fake Note for the payment
-        ctx.outputs.push({
-            let note = Note {
-                g_d: to.diversifier().g_d().unwrap(),
-                pk_d: *to.pk_d(),
-                value: value.into(),
-                rseed,
-            };
-            let encryptor = sapling_note_encryption::<_, Network>(
-                Some(extfvk.fvk.ovk),
-                note.clone(),
-                to,
-                MemoBytes::empty(),
-                &mut rng,
-            );
-            let cmu = note.cmu().to_repr().as_ref().to_vec();
-            let epk = encryptor.epk().to_bytes().to_vec();
-            let enc_ciphertext = encryptor.encrypt_note_plaintext();
-
-            let mut cout = CompactOutput::new();
-            cout.set_cmu(cmu);
-            cout.set_epk(epk);
-            cout.set_ciphertext(enc_ciphertext.as_ref()[..52].to_vec());
-            cout
-        });
-
-        // Create a fake Note for the change
-        ctx.outputs.push({
-            let change_addr = extfvk.default_address().unwrap().1;
-            let rseed = generate_random_rseed(&network(), height, &mut rng);
-            let note = Note {
-                g_d: change_addr.diversifier().g_d().unwrap(),
-                pk_d: *change_addr.pk_d(),
-                value: (in_value - value).into(),
-                rseed,
-            };
-            let encryptor = sapling_note_encryption::<_, Network>(
-                Some(extfvk.fvk.ovk),
-                note.clone(),
-                change_addr,
-                MemoBytes::empty(),
-                &mut rng,
-            );
-            let cmu = note.cmu().to_repr().as_ref().to_vec();
-            let epk = encryptor.epk().to_bytes().to_vec();
-            let enc_ciphertext = encryptor.encrypt_note_plaintext();
-
-            let mut cout = CompactOutput::new();
-            cout.set_cmu(cmu);
-            cout.set_epk(epk);
-            cout.set_ciphertext(enc_ciphertext.as_ref()[..52].to_vec());
-            cout
-        });
-
-        let mut cb = CompactBlock::new();
-        cb.set_height(u64::from(height));
-        cb.hash.resize(32, 0);
-        rng.fill_bytes(&mut cb.hash);
-        cb.prevHash.extend_from_slice(&prev_hash.0);
-        cb.vtx.push(ctx);
-        cb
     }
 
     /// Insert a fake CompactBlock into the cache DB.
