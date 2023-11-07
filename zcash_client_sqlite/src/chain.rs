@@ -79,14 +79,12 @@ mod tests {
         chain::{scan_cached_blocks, validate_chain},
         error::{ChainInvalid, Error},
     };
+    use zcash_extras::{fake_compact_block, fake_compact_block_spending};
 
     use crate::{
         chain::init::init_cache_database,
         error::SqliteClientError,
-        tests::{
-            self, fake_compact_block, fake_compact_block_spending, insert_into_cache,
-            sapling_activation_height,
-        },
+        tests::{self, insert_into_cache, sapling_activation_height},
         wallet::{
             get_balance,
             init::{init_accounts_table, init_wallet_db},

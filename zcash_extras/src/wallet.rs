@@ -1,8 +1,6 @@
 //! Functions for scanning the chain and extracting relevant information.
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
-use zcash_primitives::consensus::NetworkUpgrade;
-use zcash_primitives::transaction::Transaction;
 use zcash_primitives::{
     consensus::{self, BranchId},
     memo::MemoBytes,
@@ -14,53 +12,12 @@ use zcash_primitives::{
     zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
 };
 
-use crate::data_api::ReceivedTransaction;
-use crate::{
+use crate::WalletWrite;
+use zcash_client_backend::{
     address::RecipientAddress,
-    data_api::{error::Error, SentTransaction, WalletWrite},
-    decrypt_transaction,
+    data_api::{error::Error, SentTransaction},
     wallet::{AccountId, OvkPolicy},
 };
-
-pub const ANCHOR_OFFSET: u32 = 10;
-
-/// Scans a [`Transaction`] for any information that can be decrypted by the accounts in
-/// the wallet, and saves it to the wallet.
-pub fn decrypt_and_store_transaction<N, E, P, D>(
-    params: &P,
-    data: &mut D,
-    tx: &Transaction,
-) -> Result<(), E>
-where
-    E: From<Error<N>>,
-    P: consensus::Parameters,
-    D: WalletWrite<Error = E>,
-{
-    // Fetch the ExtendedFullViewingKeys we are tracking
-    let extfvks = data.get_extended_full_viewing_keys()?;
-
-    // Height is block height for mined transactions, and the "mempool height" (chain height + 1)
-    // for mempool transactions.
-    let height = data
-        .get_tx_height(tx.txid())?
-        .or(data
-            .block_height_extrema()?
-            .map(|(_, max_height)| max_height + 1))
-        .or_else(|| params.activation_height(NetworkUpgrade::Sapling))
-        .ok_or(Error::SaplingNotActive)?;
-
-    let outputs = decrypt_transaction(params, height, tx, &extfvks);
-    if outputs.is_empty() {
-        Ok(())
-    } else {
-        data.store_received_tx(&ReceivedTransaction {
-            tx,
-            outputs: &outputs,
-        })?;
-
-        Ok(())
-    }
-}
 
 #[allow(clippy::needless_doctest_main)]
 /// Creates a transaction paying the specified address from the given account.
@@ -149,7 +106,7 @@ where
 /// # }
 /// ```
 #[allow(clippy::too_many_arguments)]
-pub fn create_spend_to_address<E, N, P, D, R>(
+pub async fn create_spend_to_address<E, N, P, D, R>(
     wallet_db: &mut D,
     params: &P,
     prover: impl TxProver,
@@ -161,6 +118,7 @@ pub fn create_spend_to_address<E, N, P, D, R>(
     ovk_policy: OvkPolicy,
 ) -> Result<R, E>
 where
+    N: Display,
     E: From<Error<N>>,
     P: consensus::Parameters + Clone,
     R: Copy + Debug,
@@ -169,7 +127,7 @@ where
     // Check that the ExtendedSpendingKey we have been given corresponds to the
     // ExtendedFullViewingKey for the account we are spending from.
     let extfvk = ExtendedFullViewingKey::from(extsk);
-    if !wallet_db.is_valid_account_extfvk(account, &extfvk)? {
+    if !wallet_db.is_valid_account_extfvk(account, &extfvk).await? {
         return Err(E::from(Error::InvalidExtSk(account)));
     }
 
@@ -183,10 +141,13 @@ where
     // Target the next block, assuming we are up-to-date.
     let (height, anchor_height) = wallet_db
         .get_target_and_anchor_heights()
+        .await
         .and_then(|x| x.ok_or_else(|| Error::ScanRequired.into()))?;
 
     let target_value = value + DEFAULT_FEE;
-    let spendable_notes = wallet_db.select_spendable_notes(account, target_value, anchor_height)?;
+    let spendable_notes = wallet_db
+        .select_spendable_notes(account, target_value, anchor_height)
+        .await?;
 
     // Confirm we were able to select sufficient value
     let selected_value = spendable_notes.iter().map(|n| n.note_value).sum();
@@ -248,13 +209,15 @@ where
         }
     };
 
-    wallet_db.store_sent_tx(&SentTransaction {
-        tx: &tx,
-        created: time::OffsetDateTime::now_utc(),
-        output_index,
-        account,
-        recipient_address: to,
-        value,
-        memo,
-    })
+    wallet_db
+        .store_sent_tx(&SentTransaction {
+            tx: &tx,
+            created: time::OffsetDateTime::now_utc(),
+            output_index,
+            account,
+            recipient_address: to,
+            value,
+            memo,
+        })
+        .await
 }

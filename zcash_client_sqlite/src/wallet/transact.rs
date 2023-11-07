@@ -166,10 +166,11 @@ mod tests {
         data_api::{chain::scan_cached_blocks, wallet::create_spend_to_address, WalletRead},
         wallet::OvkPolicy,
     };
+    use zcash_extras::fake_compact_block;
 
     use crate::{
         chain::init::init_cache_database,
-        tests::{self, fake_compact_block, insert_into_cache, sapling_activation_height},
+        tests::{self, insert_into_cache, sapling_activation_height},
         wallet::{
             get_balance, get_balance_at,
             init::{init_accounts_table, init_blocks_table, init_wallet_db},

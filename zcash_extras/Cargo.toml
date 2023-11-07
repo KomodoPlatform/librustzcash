@@ -1,0 +1,24 @@
+[package]
+name = "zcash_extras"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+doctest = false
+
+[dependencies]
+async-trait = "0.1.52"
+group = "0.8"
+ff = "0.8"
+jubjub = "0.5.1"
+protobuf = "2.20"
+rand_core = "0.5.1"
+zcash_client_backend = { version = "0.5", path = "../zcash_client_backend" }
+zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+time = "0.3.20"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+time = { version = "0.3.20", features = ["wasm-bindgen"]}
+

@@ -17,7 +17,7 @@ use zcash_primitives::{
     consensus::{self, BlockHeight, NetworkUpgrade},
     memo::{Memo, MemoBytes},
     merkle_tree::{CommitmentTree, IncrementalWitness},
-    sapling::{Node, Note, Nullifier, PaymentAddress},
+    sapling::{Node, Nullifier, PaymentAddress},
     transaction::{components::Amount, Transaction, TxId},
     zip32::ExtendedFullViewingKey,
 };
@@ -29,74 +29,15 @@ use zcash_client_backend::{
         decode_extended_full_viewing_key, decode_payment_address, encode_extended_full_viewing_key,
         encode_payment_address,
     },
-    wallet::{AccountId, WalletShieldedOutput, WalletTx},
+    wallet::{AccountId, WalletTx},
     DecryptedOutput,
 };
+use zcash_extras::ShieldedOutput;
 
 use crate::{error::SqliteClientError, DataConnStmtCache, NoteId, WalletDb};
 
 pub mod init;
 pub mod transact;
-
-/// This trait provides a generalization over shielded output representations.
-pub trait ShieldedOutput {
-    fn index(&self) -> usize;
-    fn account(&self) -> AccountId;
-    fn to(&self) -> &PaymentAddress;
-    fn note(&self) -> &Note;
-    fn memo(&self) -> Option<&MemoBytes>;
-    fn is_change(&self) -> Option<bool>;
-    fn nullifier(&self) -> Option<Nullifier>;
-}
-
-impl ShieldedOutput for WalletShieldedOutput<Nullifier> {
-    fn index(&self) -> usize {
-        self.index
-    }
-    fn account(&self) -> AccountId {
-        self.account
-    }
-    fn to(&self) -> &PaymentAddress {
-        &self.to
-    }
-    fn note(&self) -> &Note {
-        &self.note
-    }
-    fn memo(&self) -> Option<&MemoBytes> {
-        None
-    }
-    fn is_change(&self) -> Option<bool> {
-        Some(self.is_change)
-    }
-
-    fn nullifier(&self) -> Option<Nullifier> {
-        Some(self.nf)
-    }
-}
-
-impl ShieldedOutput for DecryptedOutput {
-    fn index(&self) -> usize {
-        self.index
-    }
-    fn account(&self) -> AccountId {
-        self.account
-    }
-    fn to(&self) -> &PaymentAddress {
-        &self.to
-    }
-    fn note(&self) -> &Note {
-        &self.note
-    }
-    fn memo(&self) -> Option<&MemoBytes> {
-        Some(&self.memo)
-    }
-    fn is_change(&self) -> Option<bool> {
-        None
-    }
-    fn nullifier(&self) -> Option<Nullifier> {
-        None
-    }
-}
 
 /// Returns the address for the account.
 ///

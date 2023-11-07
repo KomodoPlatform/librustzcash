@@ -13,6 +13,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.52"
 bech32 = "0.9.1"
 bls12_381 = "0.3.1"
 bs58 = { version = "0.4", features = ["check"] }
@@ -27,9 +28,14 @@ proptest = { version = "0.10.1", optional = true }
 protobuf = "2.20"
 rand_core = "0.5.1"
 subtle = "2.2.3"
-time = "0.3"
 zcash_note_encryption = { version = "0.0", path = "../components/zcash_note_encryption" }
 zcash_primitives = { version = "0.5", path = "../zcash_primitives" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+time = "0.3.20"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+time = { version = "0.3.20", features = ["wasm-bindgen"]}
 
 [build-dependencies]
 protobuf-codegen-pure = "2.20"
@@ -40,7 +46,12 @@ rand_core = "0.5.1"
 rand_xorshift = "0.2"
 tempfile = "3.1.0"
 zcash_client_sqlite = { version = "0.3", path = "../zcash_client_sqlite" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 zcash_proofs = { version = "0.5", path = "../zcash_proofs" }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+zcash_proofs = { version = "0.5", path = "../zcash_proofs", default-features = false, features = ["local-prover"]}
 
 [features]
 test-dependencies = ["proptest", "zcash_primitives/test-dependencies"]
