@@ -634,6 +634,7 @@ impl<'a, P: consensus::Parameters, R: RngCore> Builder<'a, P, R> {
         // Change output
         //
 
+        /*
         if change.is_positive() {
             // Send change to the specified change address. If no change address
             // was set, send change to the first Sapling address given as input.
@@ -654,6 +655,7 @@ impl<'a, P: consensus::Parameters, R: RngCore> Builder<'a, P, R> {
 
             self.add_sapling_output(Some(change_address.0), change_address.1, change, None)?;
         }
+        */
 
         //
         // Record initial positions of spends and outputs
