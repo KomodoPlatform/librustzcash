@@ -36,13 +36,15 @@ where
     // Fetch the ExtendedFullViewingKeys we are tracking
     let extfvks = data.get_extended_full_viewing_keys().await?;
 
-    let max_height = data.block_height_extrema().await?.map(|(_, max)| max + 1);
+    let max_height = data
+        .block_height_extrema()
+        .await?
+        .map(|(_, max)| max + 1)
+        .ok_or(Error::ScanRequired)?;
     let height = data
         .get_tx_height(tx.txid())
         .await?
-        .or(max_height)
-        .or_else(|| params.activation_height(NetworkUpgrade::Sapling))
-        .ok_or(Error::SaplingNotActive)?;
+        .unwrap_or_else(|| max_height);
 
     let outputs = decrypt_transaction(params, height, tx, &extfvks);
     if outputs.is_empty() {
