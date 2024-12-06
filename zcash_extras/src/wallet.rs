@@ -2,7 +2,7 @@
 use std::fmt::{Debug, Display};
 
 use zcash_primitives::{
-    consensus::{self, BranchId, NetworkUpgrade},
+    consensus::{self, BranchId},
     memo::MemoBytes,
     sapling::prover::TxProver,
     transaction::{
@@ -41,10 +41,7 @@ where
         .await?
         .map(|(_, max)| max + 1)
         .ok_or(Error::ScanRequired)?;
-    let height = data
-        .get_tx_height(tx.txid())
-        .await?
-        .unwrap_or_else(|| max_height);
+    let height = data.get_tx_height(tx.txid()).await?.unwrap_or(max_height);
 
     let outputs = decrypt_transaction(params, height, tx, &extfvks);
     if outputs.is_empty() {
