@@ -8,6 +8,7 @@ use zcash_primitives::{
     transaction::{
         builder::Builder,
         components::{amount::DEFAULT_FEE, Amount},
+        Transaction,
     },
     zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
 };
@@ -15,9 +16,46 @@ use zcash_primitives::{
 use crate::WalletWrite;
 use zcash_client_backend::{
     address::RecipientAddress,
-    data_api::{error::Error, SentTransaction},
+    data_api::{error::Error, ReceivedTransaction, SentTransaction},
+    decrypt_transaction,
     wallet::{AccountId, OvkPolicy},
 };
+
+/// Scans a [`Transaction`] for any information that can be decrypted by the accounts in
+/// the wallet, and saves it to the wallet.
+pub async fn decrypt_and_store_transaction<N, E, P, D>(
+    params: &P,
+    data: &mut D,
+    tx: &Transaction,
+) -> Result<(), E>
+where
+    E: From<Error<N>>,
+    P: consensus::Parameters,
+    D: WalletWrite<Error = E>,
+{
+    // Fetch the ExtendedFullViewingKeys we are tracking
+    let extfvks = data.get_extended_full_viewing_keys().await?;
+
+    let max_height = data
+        .block_height_extrema()
+        .await?
+        .map(|(_, max)| max + 1)
+        .ok_or(Error::ScanRequired)?;
+    let height = data.get_tx_height(tx.txid()).await?.unwrap_or(max_height);
+
+    let outputs = decrypt_transaction(params, height, tx, &extfvks);
+    if outputs.is_empty() {
+        Ok(())
+    } else {
+        data.store_received_tx(&ReceivedTransaction {
+            tx,
+            outputs: &outputs,
+        })
+        .await?;
+
+        Ok(())
+    }
+}
 
 #[allow(clippy::needless_doctest_main)]
 /// Creates a transaction paying the specified address from the given account.
@@ -182,8 +220,7 @@ where
         RecipientAddress::Shielded(to) => {
             builder.add_sapling_output(ovk, to.clone(), value, memo.clone())
         }
-
-        RecipientAddress::Transparent(to) => builder.add_transparent_output(&to, value),
+        RecipientAddress::Transparent(to) => builder.add_transparent_output(to, value),
     }
     .map_err(Error::Builder)?;
 
@@ -208,6 +245,11 @@ where
                 .expect("we sent to this address")
         }
     };
+
+    // Automatically decrypt and store any outputs sent to our wallet, including change.
+    // This uses our viewing keys to find any outputs we can decrypt, creates decrypted
+    // note data for spendability, and saves them to the wallet database.
+    decrypt_and_store_transaction(params, wallet_db, &tx).await?;
 
     wallet_db
         .store_sent_tx(&SentTransaction {
